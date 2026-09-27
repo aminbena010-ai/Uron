@@ -54,7 +54,7 @@ desktop.ini
 *.tmp
 *.bak
 *~
-core
+# core dumps (NO ignorar el directorio /core del motor)
 core.*
 vgcore.*
 *.gcda
@@ -62,7 +62,8 @@ vgcore.*
 *.gcov
 
 # -------------------- Dependencias externas --------------------
-third_party/
+third_party/*
+!third_party/stb/
 external/
 vcpkg_installed/
 
