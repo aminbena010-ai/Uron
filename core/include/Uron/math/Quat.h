@@ -35,6 +35,9 @@ struct Quat {
         return {a.x * s, a.y * s, a.z * s, std::cos(half)};
     }
 
+    // Compone yaw(Y) * pitch(X) * roll(Z) en radianes: se aplica primero
+    // roll (Z), despues pitch (X) y por ultimo yaw (Y) — orden intrinseco
+    // Y-X-Z (convencion aeroespacial).
     static Quat fromEuler(f32 pitch, f32 yaw, f32 roll) {
         f32 cy = std::cos(yaw * 0.5f);
         f32 sy = std::sin(yaw * 0.5f);

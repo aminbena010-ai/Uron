@@ -23,8 +23,8 @@
 //     s.loadFromFile("shaders/wave.vert.spv", "shaders/wave.frag.spv");
 //     s.setUniform("time", t);          // mismo orden que en el .vert
 //     sprite->setShader(&s);
-//  NOTA: loadFromSource() no compila GLSL en runtime: usa glslc (o el build
-//        de CMake) para generar los .spv.
+//  NOTA: no hay carga desde GLSL en runtime: compila el GLSL con glslc (o el
+//        build de CMake) a .spv y usa loadFromFile.
 // ============================================================================
 #pragma once
 #include <Uron/Types.h>
@@ -39,9 +39,13 @@
 namespace Uron {
 
 struct ShaderDesc {
+    // Profundidad del pipeline custom (el render pass siempre tiene depth).
     bool depthTest  = false;
     bool depthWrite = false;
     bool blending   = true;
+    // Lineas (VK_POLYGON_MODE_LINE) en vez de relleno. Solo aplica al
+    // pipeline propio del shader custom: el pipeline de sprites por
+    // defecto siempre rellena (no tiene desc).
     bool wireframe  = false;
 };
 
@@ -58,10 +62,6 @@ public:
     bool loadFromFile(const std::string& vertPath,
                       const std::string& fragPath,
                       const ShaderDesc& desc = {});
-
-    bool loadFromSource(const std::string& vertSrc,
-                        const std::string& fragSrc,
-                        const ShaderDesc& desc = {});
 
     void destroy();
     void bind();

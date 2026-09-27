@@ -80,17 +80,6 @@ bool Shader::loadFromFile(const std::string& vertPath,
     return true;
 }
 
-bool Shader::loadFromSource(const std::string& vertSrc,
-                            const std::string& fragSrc,
-                            const ShaderDesc& desc) {
-    (void)vertSrc;
-    (void)fragSrc;
-    (void)desc;
-    URON_ERROR("Shader::loadFromSource no soportado: compila el GLSL a .spv "
-               "(glslc o el build de CMake) y usa loadFromFile");
-    return false;
-}
-
 void Shader::destroy() {
     if (!impl) return;
     impl->data = ShaderData{};
@@ -189,16 +178,22 @@ u32 ShaderData::packUniforms(void* dst, u32 maxBytes) const {
 
         offset = (offset + align - 1) & ~(align - 1);
         if (offset + size > maxBytes) {
-            if (!warnedOverflow) {
+            if (!warnedOverflow.exchange(true)) {
                 URON_WARN("Shader: uniforms no caben en los " +
                           std::to_string(CUSTOM_PUSH_BYTES) +
                           " bytes de push constants; se ignoran: " + name);
-                warnedOverflow = true;
             }
             break;
         }
 
-        std::memcpy(bytes + offset, &u.f, size);
+        switch (u.type) {
+            case UniformType::Float: std::memcpy(bytes + offset, &u.f, 4);  break;
+            case UniformType::Int:   std::memcpy(bytes + offset, &u.i, 4);  break;
+            case UniformType::Vec2:  std::memcpy(bytes + offset, u.v2, 8);  break;
+            case UniformType::Vec3:  std::memcpy(bytes + offset, u.v3, 12); break;
+            case UniformType::Vec4:  std::memcpy(bytes + offset, u.v4, 16); break;
+            case UniformType::Mat4:  std::memcpy(bytes + offset, u.m4, 64); break;
+        }
         offset += size;
     }
     return offset;

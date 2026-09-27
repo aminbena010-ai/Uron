@@ -41,8 +41,8 @@ struct Vec2 {
         if (len > 0.f) { x /= len; y /= len; }
     }
 
-    static Vec2 zero()  { return {0.f, 0.f}; }
-    static Vec2 one()   { return {1.f, 1.f}; }
+    static constexpr Vec2 zero()  { return {0.f, 0.f}; }
+    static constexpr Vec2 one()   { return {1.f, 1.f}; }
     static Vec2 up()    { return {0.f, 1.f}; }
     static Vec2 down()  { return {0.f,-1.f}; }
     static Vec2 left()  { return {-1.f,0.f}; }

@@ -9,6 +9,7 @@
 //  EJEMPLO: URON_INFO("Motor iniciado");
 // ============================================================================
 #pragma once
+#include <functional>
 #include <string>
 #include <string_view>
 
@@ -35,8 +36,14 @@ public:
 
     static void log(LogLevel level, std::string_view msg);
 
+    // Se invoca justo antes de terminar el proceso tras un URON_FATAL.
+    // Por defecto: std::exit(EXIT_FAILURE). El handler debe ser rapido;
+    // si vuelve, el proceso termina igualmente.
+    static void setFatalHandler(std::function<void()> handler);
+
 private:
     static LogLevel s_level;
+    static std::function<void()> s_fatalHandler;
 };
 
 }

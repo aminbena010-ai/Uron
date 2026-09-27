@@ -10,8 +10,15 @@ bool VulkanImage::create(Context& ctx,
                          uint32_t height,
                          const uint8_t* pixels,
                          uint32_t channels) {
+    m_device = ctx.device();   // BUG-034: destroy() no depende del ctx pasado
     m_width  = width;
     m_height = height;
+
+    if (channels != 4) {
+        URON_ERROR("VulkanImage solo soporta RGBA8 (channels=4), recibió " +
+                   std::to_string(channels));
+        return false;
+    }
 
     VkDeviceSize imageSize = static_cast<VkDeviceSize>(width) *
                              static_cast<VkDeviceSize>(height) * 4;
@@ -40,6 +47,12 @@ bool VulkanImage::create(Context& ctx,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
+    if (ai.memoryTypeIndex == UINT32_MAX) {
+        vkDestroyBuffer(ctx.device(), stagingBuffer, nullptr);
+        URON_ERROR("findMemoryType fallo (staging)");
+        return false;
+    }
+
     if (vkAllocateMemory(ctx.device(), &ai, nullptr, &stagingMemory) != VK_SUCCESS) {
         vkDestroyBuffer(ctx.device(), stagingBuffer, nullptr);
         URON_ERROR("vkAllocateMemory (staging) fallo");
@@ -65,6 +78,7 @@ bool VulkanImage::create(Context& ctx,
     ici.tiling        = VK_IMAGE_TILING_OPTIMAL;
     ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     ici.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                         VK_IMAGE_USAGE_SAMPLED_BIT;
     ici.samples       = VK_SAMPLE_COUNT_1_BIT;
     ici.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
@@ -85,7 +99,23 @@ bool VulkanImage::create(Context& ctx,
     imgAi.memoryTypeIndex = ctx.findMemoryType(imgReq.memoryTypeBits,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    vkAllocateMemory(ctx.device(), &imgAi, nullptr, &m_memory);
+    if (imgAi.memoryTypeIndex == UINT32_MAX) {
+        vkDestroyImage(ctx.device(), m_image, nullptr);
+        m_image = VK_NULL_HANDLE;
+        vkDestroyBuffer(ctx.device(), stagingBuffer, nullptr);
+        vkFreeMemory(ctx.device(), stagingMemory, nullptr);
+        URON_ERROR("findMemoryType fallo (imagen)");
+        return false;
+    }
+
+    if (vkAllocateMemory(ctx.device(), &imgAi, nullptr, &m_memory) != VK_SUCCESS) {
+        vkDestroyImage(ctx.device(), m_image, nullptr);
+        m_image = VK_NULL_HANDLE;
+        vkDestroyBuffer(ctx.device(), stagingBuffer, nullptr);
+        vkFreeMemory(ctx.device(), stagingMemory, nullptr);
+        URON_ERROR("vkAllocateMemory (imagen) fallo");
+        return false;
+    }
     vkBindImageMemory(ctx.device(), m_image, m_memory, 0);
 
     VkCommandPoolCreateInfo pci{};
@@ -193,15 +223,18 @@ bool VulkanImage::create(Context& ctx,
     URON_INFO("VulkanImage creada: " +
               std::to_string(width) + "x" + std::to_string(height));
 
-    (void)channels;
     return true;
 }
 
 void VulkanImage::destroy(Context& ctx) {
-    if (m_sampler) { vkDestroySampler(ctx.device(), m_sampler, nullptr); m_sampler = VK_NULL_HANDLE; }
-    if (m_view)    { vkDestroyImageView(ctx.device(), m_view, nullptr);  m_view    = VK_NULL_HANDLE; }
-    if (m_image)   { vkDestroyImage(ctx.device(), m_image, nullptr);     m_image   = VK_NULL_HANDLE; }
-    if (m_memory)  { vkFreeMemory(ctx.device(), m_memory, nullptr);      m_memory  = VK_NULL_HANDLE; }
+    // BUG-034: usa el dispositivo guardado en create(); ctx solo es
+    // fallback si create() nunca se ejecuto.
+    VkDevice dev = m_device ? m_device : ctx.device();
+    if (m_sampler) { vkDestroySampler(dev, m_sampler, nullptr); m_sampler = VK_NULL_HANDLE; }
+    if (m_view)    { vkDestroyImageView(dev, m_view, nullptr);  m_view    = VK_NULL_HANDLE; }
+    if (m_image)   { vkDestroyImage(dev, m_image, nullptr);     m_image   = VK_NULL_HANDLE; }
+    if (m_memory)  { vkFreeMemory(dev, m_memory, nullptr);      m_memory  = VK_NULL_HANDLE; }
+    m_device = VK_NULL_HANDLE;
 }
 
 }

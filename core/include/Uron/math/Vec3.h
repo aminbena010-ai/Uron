@@ -49,8 +49,8 @@ struct Vec3 {
         if (len > 0.f) { x /= len; y /= len; z /= len; }
     }
 
-    static Vec3 zero()  { return {0.f, 0.f, 0.f}; }
-    static Vec3 one()   { return {1.f, 1.f, 1.f}; }
+    static constexpr Vec3 zero()  { return {0.f, 0.f, 0.f}; }
+    static constexpr Vec3 one()   { return {1.f, 1.f, 1.f}; }
     static Vec3 up()    { return {0.f, 1.f, 0.f}; }
     static Vec3 down()  { return {0.f,-1.f, 0.f}; }
     static Vec3 right() { return {1.f, 0.f, 0.f}; }

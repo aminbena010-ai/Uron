@@ -67,6 +67,8 @@ int main() {
 
     auto camera = std::make_unique<Uron::Camera2D>("MainCamera");
     camera->setViewportSize(1280.f, 720.f);
+    camera->setPosition({640.f, 360.f});   // centro de la pantalla => vista identidad
+    scene.setCamera(camera.get());
     scene.root()->addChild(std::move(camera));
 
     engine.setScene(&scene);

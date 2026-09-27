@@ -2,8 +2,8 @@
 
 #define URON_VERSION_MAJOR 0
 #define URON_VERSION_MINOR 4
-#define URON_VERSION_PATCH 0
-#define URON_VERSION_STRING "0.4.0"
+#define URON_VERSION_PATCH 71
+#define URON_VERSION_STRING "0.4.71"
 
 namespace Uron {
     inline constexpr const char* ENGINE_NAME    = "Uron";
@@ -33,6 +33,7 @@ namespace Uron {
 
 #include <Uron/Logger.h>
 #include <Uron/Window.h>
+#include <Uron/Input.h>
 #include <Uron/Engine.h>
 
 #include <Uron/scene/Node2D.h>

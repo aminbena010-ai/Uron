@@ -14,7 +14,11 @@ public:
 
     void setViewportSize(f32 w, f32 h) { m_viewW = w; m_viewH = h; }
 
-    Mat4 viewProjection() const;
+    // Matriz mundo→pantalla (pixeles, origen arriba-izquierda): centra la
+    // posición de la cámara en el centro del viewport y aplica zoom/rotación.
+    // Con la cámara en (viewW/2, viewH/2), zoom 1 y rotación 0 => identidad.
+    // El Renderer la consume en Scene2D::render; no genera NDC.
+    Mat4 viewMatrix() const;
 
 private:
     f32 m_zoom  = 1.f;
@@ -25,16 +29,12 @@ private:
 inline Camera2D::Camera2D() : Node2D("Camera2D") {}
 inline Camera2D::Camera2D(const std::string& name) : Node2D(name) {}
 
-inline Mat4 Camera2D::viewProjection() const {
-    Mat4 t = Mat4::translation({-m_position.x, -m_position.y, 0.f});
-    Mat4 r = Mat4::rotationZ(-m_rotation);
-    Mat4 s = Mat4::scale({m_zoom, m_zoom, 1.f});
-
-    f32 halfW = m_viewW * 0.5f;
-    f32 halfH = m_viewH * 0.5f;
-    Mat4 p = Mat4::ortho(-halfW, halfW, -halfH, halfH, -1.f, 1.f);
-
-    return p * s * r * t;
+inline Mat4 Camera2D::viewMatrix() const {
+    Mat4 center = Mat4::translation({m_viewW * 0.5f, m_viewH * 0.5f, 0.f});
+    Mat4 zoom   = Mat4::scale({m_zoom, m_zoom, 1.f});
+    Mat4 rot    = Mat4::rotationZ(-m_rotation);
+    Mat4 move   = Mat4::translation({-m_position.x, -m_position.y, 0.f});
+    return center * zoom * rot * move;
 }
 
 }

@@ -15,6 +15,7 @@
 #include <Uron/Plugin/IPlugin.h>
 #include <Uron/Plugin/PluginContext.h>
 #include <memory>
+#include <type_traits>
 #include <unordered_map>
 
 namespace Uron {
@@ -29,6 +30,11 @@ public:
 
     template<typename T>
     bool load();
+
+    // Adopta un plugin ya construido (lo usa Engine::importPlugin<T>):
+    // crea contexto, llama onLoad, registra por plugin->id(). Devuelve
+    // false si id() ya estaba cargado o onLoad falla.
+    bool adopt(std::unique_ptr<IPlugin> plugin);
 
     void unload(PluginID id);
     void unloadAll();
@@ -54,24 +60,22 @@ private:
 
 template<typename T>
 bool PluginManager::load() {
-    auto plugin = std::make_unique<T>();
-    PluginID id = plugin->id();
-
-    if (m_plugins.count(id)) return false;
-
-    m_contexts.emplace(id, PluginContext(m_engine, id));
-    if (!plugin->onLoad(m_contexts.at(id))) {
-        m_contexts.erase(id);
-        return false;
-    }
-
-    plugin->markLoaded(true);
-    m_plugins[id] = std::move(plugin);
-    return true;
+    static_assert(std::is_base_of_v<IPlugin, T>,
+                  "T debe heredar de Uron::Plugin::IPlugin");
+    static_assert(detail::HasPluginID<T>::value,
+                  "T debe definir `static constexpr PluginID ID` "
+                  "(estandar de plugins, CLAUDE.md §6)");
+    if (m_plugins.count(T::ID)) return false;
+    return adopt(std::make_unique<T>());
 }
 
 template<typename T>
 T* PluginManager::get() {
+    static_assert(std::is_base_of_v<IPlugin, T>,
+                  "T debe heredar de Uron::Plugin::IPlugin");
+    static_assert(detail::HasPluginID<T>::value,
+                  "T debe definir `static constexpr PluginID ID` "
+                  "(estandar de plugins, CLAUDE.md §6)");
     auto it = m_plugins.find(T::ID);
     if (it == m_plugins.end()) return nullptr;
     return static_cast<T*>(it->second.get());

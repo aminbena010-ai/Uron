@@ -26,6 +26,7 @@ Su nombre viene del **hurón**: un animal pequeño, rapidísimo y que se adapta 
 | Sistema de plugins | ✅ | — |
 | Logger | ✅ | — |
 | Matemáticas (Vec2/3/4, Mat3/4, Quat) | ✅ | — |
+| Input básico (teclado/ratón) | ✅ | — |
 | Físicas | — | ✅ |
 | Iluminación avanzada | — | ✅ |
 | Audio | — | ✅ |
@@ -128,9 +129,20 @@ Uron/
 │       └── vulkan/     Backend Vulkan
 ├── plugins/            Plugins oficiales
 ├── examples/           Ejemplos de uso
-├── templates/          Plantilla para crear plugins
-└── docs/               Documentación
+├── docs/               Documentación
+└── templates/          Plantilla para crear plugins
 ```
+
+---
+
+## Documentación
+
+Guía completa en [`docs/`](docs/README.md):
+
+- [01 — Uso del motor](docs/01-uso-del-motor.md): build, ciclo de vida, ventana, input, logger.
+- [02 — Escena y render](docs/02-escena-y-render.md): nodos, cámara, sprites, texturas, shaders custom y render 3D.
+- [03 — Plugins](docs/03-plugins.md): usar los oficiales y crear los tuyos.
+- [04 — Arquitectura y estado](docs/04-arquitectura-y-estado.md): capas, reglas y roadmap.
 
 ---
 
@@ -183,13 +195,15 @@ Ejecutar ejemplo:
 - [x] Sistema de plugins (headers)
 - [x] Core: Engine, Window, Logger
 - [x] Backend Vulkan (init, swapchain, pipeline)
-- [ ] Shaders por defecto (triángulo)
-- [ ] Escenas 2D/3D
-- [ ] Sprites y texturas
-- [ ] Plugin oficial: Input
-- [ ] Plugin oficial: Physics
+- [x] Shaders por defecto (sprites, mallas 3D, custom)
+- [x] Escenas 2D (jerarquía, cámara, tint)
+- [x] Sprites y texturas
+- [x] Render 3D básico (`drawMesh` + depth, ejemplo `hello_cube`)
+- [x] Plugin oficial: Input
+- [x] Plugin oficial: Physics
 - [ ] Plugin oficial: Audio
 - [ ] Plugin oficial: Lighting
+- [ ] Escenas 3D (grafo) e iluminación completa
 - [ ] Editor visual
 - [ ] Backend WebGPU (web)
 

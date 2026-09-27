@@ -3,6 +3,7 @@
 
 #include <Uron/render/Texture.h>
 #include <Uron/Logger.h>
+#include <atomic>
 #include <cstring>
 
 namespace Uron {
@@ -40,6 +41,11 @@ Texture& Texture::operator=(Texture&& o) noexcept {
 bool Texture::loadFromFile(const std::string& path, const TextureDesc& desc) {
     (void)desc;
 
+    if (path.empty()) {
+        URON_ERROR("Texture::loadFromFile: path vacio");
+        return false;
+    }
+
     int w = 0, h = 0, channels = 0;
     stbi_set_flip_vertically_on_load(1);
 
@@ -73,7 +79,8 @@ bool Texture::loadFromMemory(const u8* pixels, u32 w, u32 h,
     m_height = h;
     m_pixels.resize(static_cast<size_t>(w) * h * 4);
     std::memcpy(m_pixels.data(), pixels, m_pixels.size());
-    m_handle = 1;
+    static std::atomic<u64> s_nextHandle{1};
+    m_handle = s_nextHandle.fetch_add(1, std::memory_order_relaxed);
 
     return true;
 }

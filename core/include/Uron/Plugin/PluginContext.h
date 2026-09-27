@@ -22,11 +22,13 @@ public:
     PluginID id() const { return m_id; }
 
 private:
-    Engine&         m_engine;
-    PluginID        m_id;
-    EventBus        m_eventBus;
-    ServiceRegistry m_services;
-    ApiPlugin       m_api;
+    Engine&          m_engine;
+    PluginID         m_id;
+    // Compartidos con TODOS los plugins (viven en Engine): asi un evento
+    // publicado por uno lo reciben los demas (BUG-026).
+    EventBus&        m_eventBus;
+    ServiceRegistry& m_services;
+    ApiPlugin        m_api;
 };
 
 }

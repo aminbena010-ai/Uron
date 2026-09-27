@@ -2,6 +2,7 @@
 #include <Uron/Logger.h>
 #include <GLFW/glfw3.h>
 #include <cstring>
+#include <cstdlib>
 #include <vector>
 #include <stdexcept>
 #include <algorithm>
@@ -11,6 +12,46 @@ namespace Uron::Vulkan {
 static const std::vector<const char*> kDeviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
+
+static const char* kValidationLayer = "VK_LAYER_KHRONOS_validation";
+
+// Validacion: en Debug (NDEBUG no definido) se intenta activar siempre que
+// la capa exista; URON_VALIDATION=0 la fuerza a OFF y =1 a ON (tambien en
+// Release, util para pruebas).
+static bool validationRequested() {
+    const char* env = std::getenv("URON_VALIDATION");
+    if (env && env[0] == '0') return false;
+    if (env && env[0] == '1') return true;
+#ifndef NDEBUG
+    return true;
+#else
+    return false;
+#endif
+}
+
+static bool validationLayerAvailable() {
+    uint32_t count = 0;
+    vkEnumerateInstanceLayerProperties(&count, nullptr);
+    std::vector<VkLayerProperties> layers(count);
+    vkEnumerateInstanceLayerProperties(&count, layers.data());
+    for (const auto& l : layers) {
+        if (std::strcmp(l.layerName, kValidationLayer) == 0) return true;
+    }
+    return false;
+}
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT,
+    const VkDebugUtilsMessengerCallbackDataEXT* data,
+    void*) {
+    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        URON_ERROR(std::string("[Vulkan] ") + (data ? data->pMessage : ""));
+    } else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+        URON_WARN(std::string("[Vulkan] ") + (data ? data->pMessage : ""));
+    }
+    return VK_FALSE;
+}
 
 bool Context::init(GLFWwindow* window) {
     m_window = window;
@@ -31,6 +72,13 @@ void Context::shutdown() {
         vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
         m_surface = VK_NULL_HANDLE;
     }
+    if (m_debugMessenger) {
+        auto fn = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+            vkGetInstanceProcAddr(m_instance,
+                                  "vkDestroyDebugUtilsMessengerEXT"));
+        if (fn) fn(m_instance, m_debugMessenger, nullptr);
+        m_debugMessenger = VK_NULL_HANDLE;
+    }
     if (m_instance) {
         vkDestroyInstance(m_instance, nullptr);
         m_instance = VK_NULL_HANDLE;
@@ -49,15 +97,75 @@ bool Context::createInstance() {
     uint32_t glfwExtCount = 0;
     const char** glfwExts = glfwGetRequiredInstanceExtensions(&glfwExtCount);
 
+    std::vector<const char*> extensions(glfwExts, glfwExts + glfwExtCount);
+
+    // BUG-041: capa de validacion si se pidio y esta instalada.
+    std::vector<const char*> layers;
+    if (validationRequested() && validationLayerAvailable()) {
+        layers.push_back(kValidationLayer);
+
+        uint32_t extCount = 0;
+        vkEnumerateInstanceExtensionProperties(nullptr, &extCount, nullptr);
+        std::vector<VkExtensionProperties> availExt(extCount);
+        vkEnumerateInstanceExtensionProperties(nullptr, &extCount,
+                                               availExt.data());
+        for (const auto& e : availExt) {
+            if (std::strcmp(e.extensionName,
+                            VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
+                extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+                break;
+            }
+        }
+        URON_INFO(std::string("Validacion Vulkan activa (") +
+                  kValidationLayer + ")");
+    }
+
+    uint32_t availCount = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &availCount, nullptr);
+    std::vector<VkExtensionProperties> avail(availCount);
+    vkEnumerateInstanceExtensionProperties(nullptr, &availCount, avail.data());
+
     VkInstanceCreateInfo ci{};
-    ci.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    ci.pApplicationInfo        = &appInfo;
-    ci.enabledExtensionCount   = glfwExtCount;
-    ci.ppEnabledExtensionNames = glfwExts;
+    ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    ci.pApplicationInfo = &appInfo;
+    ci.enabledLayerCount   = static_cast<uint32_t>(layers.size());
+    ci.ppEnabledLayerNames = layers.data();
+
+    for (const auto& e : avail) {
+#ifdef VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
+        if (std::strcmp(e.extensionName,
+                        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0) {
+            extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+            ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+            break;
+        }
+#endif
+    }
+
+    ci.enabledExtensionCount   = static_cast<uint32_t>(extensions.size());
+    ci.ppEnabledExtensionNames = extensions.data();
 
     if (vkCreateInstance(&ci, nullptr, &m_instance) != VK_SUCCESS) {
         URON_ERROR("vkCreateInstance fallo");
         return false;
+    }
+
+    if (!layers.empty()) {
+        auto fn = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+            vkGetInstanceProcAddr(m_instance,
+                                  "vkCreateDebugUtilsMessengerEXT"));
+        if (fn) {
+            VkDebugUtilsMessengerCreateInfoEXT dci{};
+            dci.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+            dci.messageSeverity =
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+            dci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                              VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                              VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+            dci.pfnUserCallback = debugCallback;
+            fn(m_instance, &dci, nullptr, &m_debugMessenger);
+        }
     }
     return true;
 }
@@ -82,8 +190,11 @@ bool Context::pickPhysicalDevice() {
     vkEnumeratePhysicalDevices(m_instance, &count, devices.data());
 
     for (auto dev : devices) {
-        if (isDeviceSuitable(dev)) {
+        uint32_t g = 0, p = 0;
+        if (isDeviceSuitable(dev, g, p)) {
             m_physicalDevice = dev;
+            m_graphicsFamily = g;
+            m_presentFamily  = p;
             break;
         }
     }
@@ -98,7 +209,8 @@ bool Context::pickPhysicalDevice() {
     return true;
 }
 
-bool Context::isDeviceSuitable(VkPhysicalDevice dev) {
+bool Context::isDeviceSuitable(VkPhysicalDevice dev, uint32_t& outGraphics,
+                               uint32_t& outPresent) {
     uint32_t qCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(dev, &qCount, nullptr);
     std::vector<VkQueueFamilyProperties> queues(qCount);
@@ -109,13 +221,13 @@ bool Context::isDeviceSuitable(VkPhysicalDevice dev) {
 
     for (uint32_t i = 0; i < qCount; ++i) {
         if (queues[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            m_graphicsFamily = i;
+            outGraphics = i;
             hasGraphics = true;
         }
         VkBool32 present = VK_FALSE;
         vkGetPhysicalDeviceSurfaceSupportKHR(dev, i, m_surface, &present);
         if (present) {
-            m_presentFamily = i;
+            outPresent = i;
             hasPresent = true;
         }
         if (hasGraphics && hasPresent) break;
@@ -141,7 +253,12 @@ bool Context::createLogicalDevice() {
         queueInfos.push_back(qi);
     }
 
+    VkPhysicalDeviceFeatures supported{};
+    vkGetPhysicalDeviceFeatures(m_physicalDevice, &supported);
+
     VkPhysicalDeviceFeatures features{};
+    features.fillModeNonSolid = supported.fillModeNonSolid;
+    features.samplerAnisotropy = supported.samplerAnisotropy;
 
     VkDeviceCreateInfo ci{};
     ci.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -171,7 +288,7 @@ uint32_t Context::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags prop
             return i;
         }
     }
-    return 0;
+    return UINT32_MAX;
 }
 
 }

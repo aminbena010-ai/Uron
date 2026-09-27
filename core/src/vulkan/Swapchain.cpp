@@ -6,14 +6,22 @@
 
 namespace Uron::Vulkan {
 
-bool Swapchain::init(Context& ctx, GLFWwindow* window) {
+bool Swapchain::init(Context& ctx, GLFWwindow* window, bool vsync) {
     m_ctx    = &ctx;
     m_window = window;
+    m_vsync  = vsync;
     return create();
 }
 
 void Swapchain::shutdown() {
     destroy();
+}
+
+bool Swapchain::recreate() {
+    if (!m_ctx || !m_ctx->device()) return false;
+    vkDeviceWaitIdle(m_ctx->device());
+    destroy();
+    return create();
 }
 
 bool Swapchain::create() {
@@ -24,6 +32,10 @@ bool Swapchain::create() {
     uint32_t formatCount = 0;
     vkGetPhysicalDeviceSurfaceFormatsKHR(m_ctx->physicalDevice(),
                                          m_ctx->surface(), &formatCount, nullptr);
+    if (formatCount == 0) {
+        URON_ERROR("Swapchain: la superficie no expone ningun formato");
+        return false;
+    }
     std::vector<VkSurfaceFormatKHR> formats(formatCount);
     vkGetPhysicalDeviceSurfaceFormatsKHR(m_ctx->physicalDevice(),
                                          m_ctx->surface(), &formatCount, formats.data());
@@ -45,9 +57,16 @@ bool Swapchain::create() {
     vkGetPhysicalDeviceSurfacePresentModesKHR(m_ctx->physicalDevice(),
                                               m_ctx->surface(), &presentCount, presents.data());
 
-    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    for (auto p : presents) {
-        if (p == VK_PRESENT_MODE_MAILBOX_KHR) { presentMode = p; break; }
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;   // garantizado
+    if (!m_vsync) {
+        for (auto p : presents) {
+            if (p == VK_PRESENT_MODE_MAILBOX_KHR) { presentMode = p; break; }
+        }
+        if (presentMode != VK_PRESENT_MODE_MAILBOX_KHR) {
+            for (auto p : presents) {
+                if (p == VK_PRESENT_MODE_IMMEDIATE_KHR) { presentMode = p; break; }
+            }
+        }
     }
 
     VkExtent2D extent = caps.currentExtent;
@@ -58,6 +77,10 @@ bool Swapchain::create() {
                                                 caps.maxImageExtent.width);
         extent.height = std::clamp<uint32_t>(h, caps.minImageExtent.height,
                                                 caps.maxImageExtent.height);
+    }
+    if (extent.width == 0 || extent.height == 0) {
+        // Ventana minimizada: no se puede crear; el caller reintenta.
+        return false;
     }
     m_extent = extent;
 
@@ -73,7 +96,11 @@ bool Swapchain::create() {
     ci.imageColorSpace  = chosen.colorSpace;
     ci.imageExtent      = extent;
     ci.imageArrayLayers = 1;
-    ci.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
+        usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    }
+    ci.imageUsage       = usage;
 
     uint32_t families[] = { m_ctx->graphicsFamily(), m_ctx->presentFamily() };
     if (m_ctx->graphicsFamily() != m_ctx->presentFamily()) {
@@ -130,13 +157,12 @@ void Swapchain::destroy() {
     m_images.clear();
 }
 
-bool Swapchain::acquireNextImage(VkSemaphore sem, uint32_t& outIndex) {
-    VkResult r = vkAcquireNextImageKHR(m_ctx->device(), m_swapchain,
-                                       UINT64_MAX, sem, VK_NULL_HANDLE, &outIndex);
-    return r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR;
+VkResult Swapchain::acquireNextImage(VkSemaphore sem, uint32_t& outIndex) {
+    return vkAcquireNextImageKHR(m_ctx->device(), m_swapchain,
+                                 UINT64_MAX, sem, VK_NULL_HANDLE, &outIndex);
 }
 
-bool Swapchain::present(VkQueue queue, VkSemaphore waitSem, uint32_t imageIndex) {
+VkResult Swapchain::present(VkQueue queue, VkSemaphore waitSem, uint32_t imageIndex) {
     VkPresentInfoKHR pi{};
     pi.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     pi.waitSemaphoreCount = 1;
@@ -145,8 +171,7 @@ bool Swapchain::present(VkQueue queue, VkSemaphore waitSem, uint32_t imageIndex)
     pi.pSwapchains        = &m_swapchain;
     pi.pImageIndices      = &imageIndex;
 
-    VkResult r = vkQueuePresentKHR(queue, &pi);
-    return r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR;
+    return vkQueuePresentKHR(queue, &pi);
 }
 
 }

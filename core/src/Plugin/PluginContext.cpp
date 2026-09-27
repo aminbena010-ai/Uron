@@ -6,6 +6,8 @@ namespace Uron::Plugin {
 PluginContext::PluginContext(Engine& engine, PluginID id)
     : m_engine(engine)
     , m_id(id)
+    , m_eventBus(engine.eventBus())
+    , m_services(engine.serviceRegistry())
     , m_api(engine)
 {
 }

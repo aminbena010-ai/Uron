@@ -1,6 +1,7 @@
 #pragma once
 #include <Uron/Types.h>
 #include <Uron/math/Vec2.h>
+#include <Uron/math/Mat4.h>
 #include <Uron/render/Color.h>
 
 #include <memory>
@@ -63,9 +64,16 @@ public:
 
     // ==================== Interno ====================
     void updateTree(Scene2D& scene, float dt);
-    void renderTree(Renderer& renderer);
+    void renderTree(Renderer& renderer, const Mat4& parentWorld,
+                    const Color& parentTint);
     void enterTree(Scene2D& scene);
     void exitTree(Scene2D& scene);
+
+    // Matriz local (traslación·rotación·escala) y resultado de la última
+    // propagación del árbol (válida durante onRender/onUpdate).
+    Mat4 localTransform() const;
+    const Mat4& worldTransform() const { return m_world; }
+    const Color& worldTint() const { return m_worldTint; }
 
 protected:
     std::string m_name;
@@ -77,6 +85,12 @@ protected:
 
     Node2D* m_parent = nullptr;
     std::vector<std::unique_ptr<Node2D>> m_children;
+
+    // Escena a la que pertenece el árbol (nullptr = fuera de escena);
+    // la usan addChild/removeChild para disparar enter/exit en vivo.
+    Scene2D*   m_scene      = nullptr;
+    Mat4       m_world;
+    Color      m_worldTint  = Color::White();
 
     friend class Scene2D;
 };

@@ -132,20 +132,31 @@ go in `core/src/...`. **Never** mix public and private headers.
 
 ### Push constant layout rules
 
-- **SpritePipeline:** `sizeof(float) * 6` = 24 bytes.
+- **SpritePipeline:** `sizeof(float) * 12` = 48 bytes.
   ```
-  offset  0: vec2 position
-  offset  8: vec2 size
-  offset 16: vec2 screenSize
+  offset  0: vec4 row0   (a b c d  — matriz afín 2D)
+  offset 16: vec4 row1   (e f screenW screenH)
+  offset 32: vec4 spriteTint
   ```
-- **Custom shaders:** `sizeof(float) * 32` = 128 bytes (24 + 24 of uniforms).
+- **Custom shaders:** `sizeof(float) * 32` = 128 bytes (48 de sprite +
+  80 de uniforms, `UNIFORM_PUSH_BYTES`, alineados std430 desde offset 48).
 - **Never** add manual padding without a `static_assert` verifying it.
+
+### Depth rules
+
+- El render pass **siempre** tiene un attachment `D32_SFLOAT`; todo
+  pipeline declara `VkPipelineDepthStencilStateCreateInfo` (sprites:
+  test/write OFF; mallas: test ON, write ON, LESS_OR_EQUAL).
 
 ### Sync rules
 
 - 2 frames in flight (MAX_FRAMES = 2).
-- Semaphores: `imageAvailable[N]`, `renderFinished[N]`.
-- Fences: `inFlight[N]`, with `VK_FENCE_CREATE_SIGNALED_BIT`.
+- Semaphores: `imageAvailable[N]`, `renderFinished[imageIndex]`
+  (uno por imagen de swapchain: reutilizar por frame hacia que el
+  present anterior siguiera usando el semáforo).
+- Fences: `inFlight[N]`, con `VK_FENCE_CREATE_SIGNALED_BIT`.
+- Validación: activa por defecto en Debug; `URON_VALIDATION=0/1`
+  la fuerza a OFF/ON (también funciona en Release).
 
 ---
 

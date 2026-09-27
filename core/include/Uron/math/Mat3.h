@@ -22,8 +22,9 @@ struct Mat3 {
 
     Mat3() = default;
 
-    static Mat3 identity() { return Mat3{}; }
+    static constexpr Mat3 identity() { return Mat3{}; }
 
+    // No es constexpr: std::cos/std::sin no lo son en C++17.
     static Mat3 rotation(f32 radians) {
         Mat3 r;
         f32 c = std::cos(radians);

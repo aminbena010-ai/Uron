@@ -1,4 +1,5 @@
 #include <Uron/scene/Scene2D.h>
+#include <Uron/scene/Camera2D.h>
 #include <Uron/render/Renderer.h>
 #include <Uron/Logger.h>
 
@@ -35,7 +36,8 @@ void Scene2D::update(float dt) {
 
 void Scene2D::render(Renderer& renderer) {
     if (!m_active || !m_root) return;
-    m_root->renderTree(renderer);
+    Mat4 view = m_camera ? m_camera->viewMatrix() : Mat4::identity();
+    m_root->renderTree(renderer, view, Color::White());
 }
 
 }

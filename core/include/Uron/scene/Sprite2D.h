@@ -16,7 +16,7 @@ public:
     Vec2 size() const { return m_size; }
     void setSize(const Vec2& s) { m_size = s; }
 
-    void setTexture(const std::string& path);
+    bool setTexture(const std::string& path);
     Texture& texture() { return m_texture; }
 
     void setShader(Shader* shader) { m_shader = shader; }

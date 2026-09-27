@@ -9,20 +9,18 @@ Sprite2D::Sprite2D() : Node2D("Sprite") {}
 Sprite2D::Sprite2D(const std::string& name) : Node2D(name) {}
 Sprite2D::~Sprite2D() = default;
 
-void Sprite2D::setTexture(const std::string& path) {
-    m_texture.loadFromFile(path);
+bool Sprite2D::setTexture(const std::string& path) {
+    return m_texture.loadFromFile(path);
 }
 
 void Sprite2D::onRender(Renderer& renderer) {
     if (!m_texture.isValid()) return;
 
-    Mat4 t = Mat4::identity();
-    t.m[0][0] = m_size.x;
-    t.m[1][1] = m_size.y;
-    t.m[3][0] = m_position.x;
-    t.m[3][1] = m_position.y;
+    // El quad unitario [0,1]² se escala por m_size y hereda la transform
+    // mundial (padres, rotación, escala) ya compuesta por renderTree.
+    Mat4 quad = m_world * Mat4::scale({m_size.x, m_size.y, 1.f});
 
-    renderer.drawSprite(m_texture, t, m_shader);
+    renderer.drawSprite(m_texture, quad, m_shader, m_worldTint);
 }
 
 }

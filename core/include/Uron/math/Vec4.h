@@ -38,8 +38,8 @@ struct Vec4 {
         return len > 0.f ? Vec4{x/len, y/len, z/len, w/len} : Vec4{};
     }
 
-    static Vec4 zero() { return {0.f, 0.f, 0.f, 0.f}; }
-    static Vec4 one()  { return {1.f, 1.f, 1.f, 1.f}; }
+    static constexpr Vec4 zero() { return {0.f, 0.f, 0.f, 0.f}; }
+    static constexpr Vec4 one()  { return {1.f, 1.f, 1.f, 1.f}; }
 };
 
 inline Vec4 operator*(f32 s, const Vec4& v) { return {v.x*s, v.y*s, v.z*s, v.w*s}; }

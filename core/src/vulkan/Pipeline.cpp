@@ -1,42 +1,23 @@
 #include "Pipeline.h"
 #include "VulkanContext.h"
 #include "Swapchain.h"
+#include "VulkanUtil.h"
 #include <Uron/Logger.h>
+#include <Uron/render/Mesh.h>
 #include <vector>
-#include <fstream>
+#include <cstddef>
 
 namespace Uron::Vulkan {
-
-static std::vector<char> readFile(const char* path) {
-    std::ifstream f(path, std::ios::ate | std::ios::binary);
-    if (!f.is_open()) return {};
-    size_t size = static_cast<size_t>(f.tellg());
-    std::vector<char> buf(size);
-    f.seekg(0);
-    f.read(buf.data(), size);
-    return buf;
-}
-
-static VkShaderModule createModule(VkDevice dev, const std::vector<char>& code) {
-    if (code.empty()) return VK_NULL_HANDLE;
-    VkShaderModuleCreateInfo ci{};
-    ci.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    ci.codeSize = code.size();
-    ci.pCode    = reinterpret_cast<const uint32_t*>(code.data());
-    VkShaderModule m = VK_NULL_HANDLE;
-    vkCreateShaderModule(dev, &ci, nullptr, &m);
-    return m;
-}
 
 bool Pipeline::init(Context& ctx, Swapchain& swap, VkRenderPass renderPass) {
     m_ctx = &ctx;
     m_swap = &swap;
 
-    auto vertCode = readFile("shaders/triangle.vert.spv");
-    auto fragCode = readFile("shaders/triangle.frag.spv");
+    auto vertCode = Util::readFile("shaders/mesh.vert.spv");
+    auto fragCode = Util::readFile("shaders/mesh.frag.spv");
 
-    VkShaderModule vert = createModule(ctx.device(), vertCode);
-    VkShaderModule frag = createModule(ctx.device(), fragCode);
+    VkShaderModule vert = Util::createModule(ctx.device(), vertCode);
+    VkShaderModule frag = Util::createModule(ctx.device(), fragCode);
 
     if (!vert || !frag) {
         URON_ERROR("No se pudieron cargar shaders .spv");
@@ -56,35 +37,61 @@ bool Pipeline::init(Context& ctx, Swapchain& swap, VkRenderPass renderPass) {
     VkPipelineVertexInputStateCreateInfo vi{};
     vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
+    VkVertexInputBindingDescription bind{};
+    bind.binding   = 0;
+    bind.stride    = sizeof(Vertex);
+    bind.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkVertexInputAttributeDescription attrs[4]{};
+    attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT,    offsetof(Vertex, position)};
+    attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT,    offsetof(Vertex, normal)};
+    attrs[2] = {2, 0, VK_FORMAT_R32G32_SFLOAT,       offsetof(Vertex, uv)};
+    attrs[3] = {3, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Vertex, color)};
+
+    vi.vertexBindingDescriptionCount   = 1;
+    vi.pVertexBindingDescriptions      = &bind;
+    vi.vertexAttributeDescriptionCount = 4;
+    vi.pVertexAttributeDescriptions    = attrs;
+
     VkPipelineInputAssemblyStateCreateInfo ia{};
     ia.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-    VkViewport viewport{};
-    viewport.width    = static_cast<float>(swap.extent().width);
-    viewport.height   = static_cast<float>(swap.extent().height);
-    viewport.maxDepth = 1.f;
-
-    VkRect2D scissor{};
-    scissor.extent = swap.extent();
-
+    // Viewport/scissor dinamicos: se fijan en beginFrame con el extent real
+    // (un resize no obliga a recrear pipelines).
     VkPipelineViewportStateCreateInfo vp{};
     vp.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     vp.viewportCount = 1;
-    vp.pViewports    = &viewport;
     vp.scissorCount  = 1;
-    vp.pScissors     = &scissor;
+
+    VkDynamicState dynStates[2] = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+    VkPipelineDynamicStateCreateInfo dyn{};
+    dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dyn.dynamicStateCount = 2;
+    dyn.pDynamicStates    = dynStates;
 
     VkPipelineRasterizationStateCreateInfo rast{};
     rast.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rast.polygonMode = VK_POLYGON_MODE_FILL;
     rast.lineWidth   = 1.f;
-    rast.cullMode    = VK_CULL_MODE_BACK_BIT;
-    rast.frontFace   = VK_FRONT_FACE_CLOCKWISE;
+    // Sin culling: la inversión de Y de perspective() invierte el winding
+    // proyectado y el MVP puede ser identidad (sin flip). Regresar a BACK
+    // cuando exista convención de winding fija en el motor.
+    rast.cullMode    = VK_CULL_MODE_NONE;
+    rast.frontFace   = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
     VkPipelineMultisampleStateCreateInfo ms{};
     ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo depth{};
+    depth.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth.depthTestEnable  = VK_TRUE;
+    depth.depthWriteEnable = VK_TRUE;
+    depth.depthCompareOp   = VK_COMPARE_OP_LESS_OR_EQUAL;
 
     VkPipelineColorBlendAttachmentState blendAttach{};
     blendAttach.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
@@ -97,9 +104,23 @@ bool Pipeline::init(Context& ctx, Swapchain& swap, VkRenderPass renderPass) {
     blend.attachmentCount = 1;
     blend.pAttachments    = &blendAttach;
 
+    VkPushConstantRange push{};
+    push.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    push.offset     = 0;
+    push.size       = sizeof(float) * 16;   // mat4 MVP
+    static_assert(sizeof(float) * 16 == 64, "MVP push = 64 bytes");
+
     VkPipelineLayoutCreateInfo pli{};
-    pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    vkCreatePipelineLayout(ctx.device(), &pli, nullptr, &m_layout);
+    pli.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pli.pushConstantRangeCount = 1;
+    pli.pPushConstantRanges    = &push;
+    if (vkCreatePipelineLayout(ctx.device(), &pli, nullptr, &m_layout)
+        != VK_SUCCESS) {
+        URON_ERROR("vkCreatePipelineLayout fallo");
+        vkDestroyShaderModule(ctx.device(), vert, nullptr);
+        vkDestroyShaderModule(ctx.device(), frag, nullptr);
+        return false;
+    }
 
     VkGraphicsPipelineCreateInfo ci{};
     ci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -108,8 +129,10 @@ bool Pipeline::init(Context& ctx, Swapchain& swap, VkRenderPass renderPass) {
     ci.pVertexInputState   = &vi;
     ci.pInputAssemblyState = &ia;
     ci.pViewportState      = &vp;
+    ci.pDynamicState       = &dyn;
     ci.pRasterizationState = &rast;
     ci.pMultisampleState   = &ms;
+    ci.pDepthStencilState  = &depth;
     ci.pColorBlendState    = &blend;
     ci.layout              = m_layout;
     ci.renderPass          = renderPass;

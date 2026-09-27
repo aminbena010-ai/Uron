@@ -75,7 +75,7 @@ struct Mat4 {
         r.m[1][1] = 2.f / (b - t);
         r.m[2][2] = 1.f / (n - f);
         r.m[3][0] = (r_ + l) / (l - r_);
-        r.m[3][1] = (t + b) / (b - t);
+        r.m[3][1] = (t + b) / (t - b);
         r.m[3][2] = n / (n - f);
         return r;
     }

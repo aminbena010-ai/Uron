@@ -31,10 +31,12 @@ struct WindowConfig {
 };
 
 struct WindowCallbacks {
-    std::function<void(i32 key, i32 action)> onKey;
-    std::function<void(f32 x, f32 y)>        onMouseMove;
-    std::function<void(u32 w, u32 h)>        onResize;
-    std::function<void()>                    onClose;
+    std::function<void(i32 key, i32 action)>    onKey;
+    std::function<void(i32 button, i32 action)> onMouseButton;
+    std::function<void(f32 x, f32 y)>           onMouseMove;
+    std::function<void(f32 dx, f32 dy)>         onScroll;
+    std::function<void(u32 w, u32 h)>           onResize;
+    std::function<void()>                       onClose;
 };
 
 class Window {
@@ -63,14 +65,25 @@ public:
     u32         width()  const;
     u32         height() const;
     bool        vsync()  const;
+    // true (una sola vez) si setVSync cambio el flag desde el ultimo consumo.
+    bool        takeVSyncDirty();
 
     void setCallbacks(const WindowCallbacks& cbs);
 
     void* nativeHandle() const;
+    // Display nativo (X11/Wayland): siempre nullptr con GLFW, que no lo
+    // expone. Vulkan no lo necesita: usa solo nativeHandle() (GLFWwindow*).
     void* nativeDisplay() const;
     bool  isValid() const;
 
 private:
+    friend class Engine;
+
+    // Segundo canal de callbacks (el motor lo usa para alimentar Input sin
+    // pisar los callbacks del usuario). setCallbacks() es el canal usuario.
+    void setEngineCallbacks(const WindowCallbacks& cbs);
+    void installHooks_();
+
     struct Impl;
     Impl* impl;
 };

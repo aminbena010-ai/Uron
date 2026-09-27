@@ -10,11 +10,18 @@ class Context;
 
 class Swapchain {
 public:
-    bool init(Context& ctx, GLFWwindow* window);
+    // vsync=true  => present mode FIFO (siempre disponible).
+    // vsync=false => MAILBOX si existe, si no IMMEDIATE, si no FIFO.
+    bool init(Context& ctx, GLFWwindow* window, bool vsync);
     void shutdown();
 
-    bool acquireNextImage(VkSemaphore sem, uint32_t& outIndex);
-    bool present(VkQueue queue, VkSemaphore waitSem, uint32_t imageIndex);
+    // Destruye y crea de nuevo (tras resize o cambio de vsync).
+    // Devuelve false si la superficie esta en extent 0 (ventana minimizada):
+    // en ese caso no se destruye la swapchain actual.
+    bool recreate();
+
+    VkResult acquireNextImage(VkSemaphore sem, uint32_t& outIndex);
+    VkResult present(VkQueue queue, VkSemaphore waitSem, uint32_t imageIndex);
 
     VkSwapchainKHR handle()  const { return m_swapchain; }
     VkFormat       format()  const { return m_format; }
@@ -28,6 +35,7 @@ private:
 
     Context*         m_ctx       = nullptr;
     GLFWwindow*      m_window    = nullptr;
+    bool             m_vsync     = true;
     VkSwapchainKHR   m_swapchain = VK_NULL_HANDLE;
     VkFormat         m_format    = VK_FORMAT_UNDEFINED;
     VkExtent2D       m_extent{};

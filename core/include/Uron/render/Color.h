@@ -22,11 +22,14 @@ struct Color {
         };
     }
 
-    u32 toHex() const {
-        u32 ri = static_cast<u32>(r * 255.f) & 0xFF;
-        u32 gi = static_cast<u32>(g * 255.f) & 0xFF;
-        u32 bi = static_cast<u32>(b * 255.f) & 0xFF;
-        return (ri << 16) | (gi << 8) | bi;
+    // Devuelve 0xRRGGBB (sin alpha). Entradas clampeadas a [0,1].
+    constexpr u32 toHex() const {
+        auto c8 = [](f32 v) constexpr -> u32 {
+            if (v < 0.f) v = 0.f;
+            if (v > 1.f) v = 1.f;
+            return static_cast<u32>(v * 255.f + 0.5f);
+        };
+        return (c8(r) << 16) | (c8(g) << 8) | c8(b);
     }
 
     static constexpr Color Black()   { return {0.f, 0.f, 0.f, 1.f}; }

@@ -7,6 +7,7 @@
 namespace Uron {
 
 class Renderer;
+class Camera2D;
 
 class Scene2D {
 public:
@@ -28,6 +29,12 @@ public:
     const Color& clearColor() const { return m_clearColor; }
     void setClearColor(const Color& c) { m_clearColor = c; }
 
+    // ==================== Cámara ====================
+    // Cámara activa (no la posee; debe vivir mientras esté referenciada).
+    // Sin cámara, el mundo coincide con la pantalla.
+    void setCamera(Camera2D* camera) { m_camera = camera; }
+    Camera2D* camera() const { return m_camera; }
+
     // ==================== Ciclo de vida ====================
     void enter();
     void exit();
@@ -40,6 +47,7 @@ private:
     std::string m_name;
     std::unique_ptr<Node2D> m_root;
     Color m_clearColor = Color::Black();
+    Camera2D* m_camera = nullptr;
     bool m_active = false;
 };
 

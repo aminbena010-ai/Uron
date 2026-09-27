@@ -7,6 +7,7 @@
 set(URON_CORE_SOURCES
     src/Logger.cpp
     src/Window.cpp
+    src/Input.cpp
     src/Engine.cpp
 
     src/Plugin/PluginManager.cpp
@@ -20,9 +21,11 @@ set(URON_CORE_SOURCES
 
     src/render/Texture.cpp
     src/render/Shader.cpp
+    src/render/Mesh.cpp
 
     src/vulkan/VulkanContext.cpp
     src/vulkan/Swapchain.cpp
+    src/vulkan/VulkanUtil.cpp
     src/vulkan/Pipeline.cpp
     src/vulkan/SpritePipeline.cpp
     src/vulkan/VulkanImage.cpp
@@ -35,6 +38,7 @@ set(URON_CORE_HEADERS
     include/Uron/Types.h
     include/Uron/Logger.h
     include/Uron/Window.h
+    include/Uron/Input.h
     include/Uron/Engine.h
 
     include/Uron/math/Math.h
@@ -76,6 +80,7 @@ set(URON_CORE_PRIVATE_HEADERS
     src/render/ShaderInternal.h
     src/vulkan/VulkanContext.h
     src/vulkan/Swapchain.h
+    src/vulkan/VulkanUtil.h
     src/vulkan/Pipeline.h
     src/vulkan/SpritePipeline.h
     src/vulkan/VulkanImage.h
@@ -138,10 +143,12 @@ source_group("Sources\\Scene"    FILES
 source_group("Sources\\Render"   FILES
     src/render/Texture.cpp
     src/render/Shader.cpp
+    src/render/Mesh.cpp
 )
 source_group("Sources\\Vulkan"   FILES
     src/vulkan/VulkanContext.cpp
     src/vulkan/Swapchain.cpp
+    src/vulkan/VulkanUtil.cpp
     src/vulkan/Pipeline.cpp
     src/vulkan/SpritePipeline.cpp
     src/vulkan/VulkanImage.cpp

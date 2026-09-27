@@ -9,6 +9,23 @@ PluginManager::PluginManager(Engine& engine)
 {
 }
 
+bool PluginManager::adopt(std::unique_ptr<IPlugin> plugin) {
+    if (!plugin) return false;
+
+    PluginID id = plugin->id();
+    if (m_plugins.count(id)) return false;
+
+    m_contexts.emplace(id, PluginContext(m_engine, id));
+    if (!plugin->onLoad(m_contexts.at(id))) {
+        m_contexts.erase(id);
+        return false;
+    }
+
+    plugin->markLoaded(true);
+    m_plugins[id] = std::move(plugin);
+    return true;
+}
+
 void PluginManager::unload(PluginID id) {
     auto it = m_plugins.find(id);
     if (it == m_plugins.end()) return;

@@ -104,6 +104,23 @@ set_target_properties(hello_sprite PROPERTIES
 add_dependencies(hello_sprite uron_example_data)
 
 # ----------------------------------------------------------------------------
+# hello_input - Ejemplo de teclado y raton con engine.input()
+# ----------------------------------------------------------------------------
+add_executable(hello_input
+    hello_input/main.cpp
+)
+
+target_link_libraries(hello_input PRIVATE
+    Uron::Core
+)
+
+set_target_properties(hello_input PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+add_dependencies(hello_input uron_example_data)
+
+# ----------------------------------------------------------------------------
 # hello_shader - Ejemplo de shader custom por sprite
 # ----------------------------------------------------------------------------
 add_executable(hello_shader
@@ -119,3 +136,20 @@ set_target_properties(hello_shader PROPERTIES
 )
 
 add_dependencies(hello_shader uron_example_data)
+
+# ----------------------------------------------------------------------------
+# hello_cube - Ejemplo 3D: malla con MeshBuilder + drawMesh con profundidad
+# ----------------------------------------------------------------------------
+add_executable(hello_cube
+    hello_cube/main.cpp
+)
+
+target_link_libraries(hello_cube PRIVATE
+    Uron::Core
+)
+
+set_target_properties(hello_cube PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+add_dependencies(hello_cube uron_example_data)

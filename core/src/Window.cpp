@@ -8,9 +8,12 @@ namespace Uron {
 struct Window::Impl {
     GLFWwindow*     handle   = nullptr;
     WindowConfig    config;
-    WindowCallbacks callbacks;
+    WindowCallbacks userCallbacks;
+    WindowCallbacks engineCallbacks;
+    bool            hooksInstalled = false;
     bool            closed   = false;
     bool            ownsGLFW = false;
+    bool            vsyncDirty = false;   // setVSync pendiente de aplicar
     std::string     title;
 };
 
@@ -85,6 +88,7 @@ bool Window::create(const WindowConfig& cfg) {
     impl->config = cfg;
     impl->title  = cfg.title;
     impl->closed = false;
+    installHooks_();
     s_windowCount++;
 
     URON_INFO(std::string("Ventana creada: ") + cfg.title);
@@ -96,6 +100,7 @@ void Window::destroy() {
 
     glfwDestroyWindow(impl->handle);
     impl->handle = nullptr;
+    impl->hooksInstalled = false;
 
     s_windowCount--;
 
@@ -150,7 +155,10 @@ void Window::setFullscreen(bool enable) {
 }
 
 void Window::setVSync(bool enable) {
-    impl->config.vsync = enable;
+    if (impl->config.vsync != enable) {
+        impl->config.vsync = enable;
+        impl->vsyncDirty   = true;   // el renderer recrea la swapchain
+    }
 }
 
 std::string Window::title() const {
@@ -175,47 +183,88 @@ bool Window::vsync() const {
     return impl->config.vsync;
 }
 
+bool Window::takeVSyncDirty() {
+    bool d = impl->vsyncDirty;
+    impl->vsyncDirty = false;
+    return d;
+}
+
 void Window::setCallbacks(const WindowCallbacks& cbs) {
-    impl->callbacks = cbs;
-    if (!impl->handle) return;
+    impl->userCallbacks = cbs;
+    installHooks_();
+}
+
+void Window::setEngineCallbacks(const WindowCallbacks& cbs) {
+    impl->engineCallbacks = cbs;
+    installHooks_();
+}
+
+// Se instalan UNA sola vez en create(): los lambdas despachan primero al
+// canal del motor (Input ve el evento antes que el codigo del usuario) y
+// despues al canal usuario, de modo que setCallbacks() no pone al motor
+// a ciegas ni viceversa.
+void Window::installHooks_() {
+    if (!impl->handle || impl->hooksInstalled) return;
 
     glfwSetWindowUserPointer(impl->handle, impl);
 
-    if (cbs.onKey) {
-        glfwSetKeyCallback(impl->handle,
-            [](GLFWwindow* w, int key, int, int action, int) {
-                auto* im = static_cast<Impl*>(glfwGetWindowUserPointer(w));
-                if (im && im->callbacks.onKey) im->callbacks.onKey(key, action);
-            });
-    }
+    glfwSetKeyCallback(impl->handle,
+        [](GLFWwindow* w, int key, int, int action, int) {
+            auto* im = static_cast<Impl*>(glfwGetWindowUserPointer(w));
+            if (!im) return;
+            if (im->engineCallbacks.onKey) im->engineCallbacks.onKey(key, action);
+            if (im->userCallbacks.onKey)   im->userCallbacks.onKey(key, action);
+        });
 
-    if (cbs.onMouseMove) {
-        glfwSetCursorPosCallback(impl->handle,
-            [](GLFWwindow* w, double x, double y) {
-                auto* im = static_cast<Impl*>(glfwGetWindowUserPointer(w));
-                if (im && im->callbacks.onMouseMove)
-                    im->callbacks.onMouseMove(static_cast<f32>(x),
-                                              static_cast<f32>(y));
-            });
-    }
+    glfwSetMouseButtonCallback(impl->handle,
+        [](GLFWwindow* w, int button, int action, int) {
+            auto* im = static_cast<Impl*>(glfwGetWindowUserPointer(w));
+            if (!im) return;
+            if (im->engineCallbacks.onMouseButton)
+                im->engineCallbacks.onMouseButton(button, action);
+            if (im->userCallbacks.onMouseButton)
+                im->userCallbacks.onMouseButton(button, action);
+        });
 
-    if (cbs.onResize) {
-        glfwSetFramebufferSizeCallback(impl->handle,
-            [](GLFWwindow* w, int width, int height) {
-                auto* im = static_cast<Impl*>(glfwGetWindowUserPointer(w));
-                if (im && im->callbacks.onResize)
-                    im->callbacks.onResize(static_cast<u32>(width),
-                                           static_cast<u32>(height));
-            });
-    }
+    glfwSetCursorPosCallback(impl->handle,
+        [](GLFWwindow* w, double x, double y) {
+            auto* im = static_cast<Impl*>(glfwGetWindowUserPointer(w));
+            if (!im) return;
+            const f32 fx = static_cast<f32>(x);
+            const f32 fy = static_cast<f32>(y);
+            if (im->engineCallbacks.onMouseMove) im->engineCallbacks.onMouseMove(fx, fy);
+            if (im->userCallbacks.onMouseMove)   im->userCallbacks.onMouseMove(fx, fy);
+        });
 
-    if (cbs.onClose) {
-        glfwSetWindowCloseCallback(impl->handle,
-            [](GLFWwindow* w) {
-                auto* im = static_cast<Impl*>(glfwGetWindowUserPointer(w));
-                if (im && im->callbacks.onClose) im->callbacks.onClose();
-            });
-    }
+    glfwSetScrollCallback(impl->handle,
+        [](GLFWwindow* w, double dx, double dy) {
+            auto* im = static_cast<Impl*>(glfwGetWindowUserPointer(w));
+            if (!im) return;
+            const f32 fdx = static_cast<f32>(dx);
+            const f32 fdy = static_cast<f32>(dy);
+            if (im->engineCallbacks.onScroll) im->engineCallbacks.onScroll(fdx, fdy);
+            if (im->userCallbacks.onScroll)   im->userCallbacks.onScroll(fdx, fdy);
+        });
+
+    glfwSetFramebufferSizeCallback(impl->handle,
+        [](GLFWwindow* w, int width, int height) {
+            auto* im = static_cast<Impl*>(glfwGetWindowUserPointer(w));
+            if (!im) return;
+            const u32 uw = static_cast<u32>(width);
+            const u32 uh = static_cast<u32>(height);
+            if (im->engineCallbacks.onResize) im->engineCallbacks.onResize(uw, uh);
+            if (im->userCallbacks.onResize)   im->userCallbacks.onResize(uw, uh);
+        });
+
+    glfwSetWindowCloseCallback(impl->handle,
+        [](GLFWwindow* w) {
+            auto* im = static_cast<Impl*>(glfwGetWindowUserPointer(w));
+            if (!im) return;
+            if (im->engineCallbacks.onClose) im->engineCallbacks.onClose();
+            if (im->userCallbacks.onClose)   im->userCallbacks.onClose();
+        });
+
+    impl->hooksInstalled = true;
 }
 
 void* Window::nativeHandle() const {
@@ -223,6 +272,8 @@ void* Window::nativeHandle() const {
 }
 
 void* Window::nativeDisplay() const {
+    // GLFW no expone el display (X11/Wayland) en ningun backend; ver
+    // Window.h. Vulkan solo necesita nativeHandle().
     return nullptr;
 }
 

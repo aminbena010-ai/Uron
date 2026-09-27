@@ -25,6 +25,7 @@ public:
     uint32_t height() const { return m_height; }
 
 private:
+    VkDevice       m_device  = VK_NULL_HANDLE;   // guardado en create()
     VkImage        m_image   = VK_NULL_HANDLE;
     VkImageView    m_view    = VK_NULL_HANDLE;
     VkSampler      m_sampler = VK_NULL_HANDLE;
