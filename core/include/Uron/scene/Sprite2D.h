@@ -5,6 +5,8 @@
 
 namespace Uron {
 
+class Shader;
+
 class Sprite2D : public Node2D {
 public:
     Sprite2D();
@@ -17,11 +19,15 @@ public:
     void setTexture(const std::string& path);
     Texture& texture() { return m_texture; }
 
+    void setShader(Shader* shader) { m_shader = shader; }
+    Shader* shader() const { return m_shader; }
+
     void onRender(Renderer& renderer) override;
 
 private:
     Vec2 m_size{1.f, 1.f};
     Texture m_texture;
+    Shader* m_shader = nullptr;
 };
 
 }

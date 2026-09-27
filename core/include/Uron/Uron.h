@@ -1,9 +1,9 @@
 #pragma once
 
 #define URON_VERSION_MAJOR 0
-#define URON_VERSION_MINOR 1
+#define URON_VERSION_MINOR 4
 #define URON_VERSION_PATCH 0
-#define URON_VERSION_STRING "0.1.0"
+#define URON_VERSION_STRING "0.4.0"
 
 namespace Uron {
     inline constexpr const char* ENGINE_NAME    = "Uron";

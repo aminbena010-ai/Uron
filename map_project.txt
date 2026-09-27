@@ -1,0 +1,262 @@
+===============================================================================
+ MAP_PROJECT.TXT  —  indice de archivos del proyecto URON
+-------------------------------------------------------------------------------
+ COMO USARLO: leelo ANTES de tocar cualquier archivo (regla 0 de CLAUDE.md).
+
+   · Formato:  RUTA  |  que hace  |  simbolos/clases clave
+   · El numero entre () es la cantidad de LINEAS: si es <= ~100 leerlo entero,
+     si es grande usar Grep en vez de leer el archivo completo.
+   · Si CREAS un archivo nuevo, ANADELO AQUI en el mismo commit.
+   · Si algo NO esta aqui, probablemente no existe: no lo des dupliques.
+   · Build:  cmake -S . -B build  &&  cmake --build build -j
+   · Binarios en build/bin/   (shaders y assets se copian ahi en POST_BUILD)
+
+ Mapa actualizado: Uron 0.4.0
+===============================================================================
+
+
+===============================================================================
+ 1. RAIZ DEL PROYECTO
+===============================================================================
+CMakeLists.txt              | raiz CMake 3.20, proyecto Uron 0.4.0, options
+                            | (URON_BUILD_EXAMPLES/PLUGINS), compila shaders
+                            | con glslc a build/bin/shaders/*.spv
+claude.md                   | REGLAS DEL PROYECTO (leer antes de codificar)
+map_project.txt             | este archivo
+README.md                   | presentacion, filosofia y uso del motor
+LICENSE                     | licencia
+.gitignore                  | ignora build/, .spv, etc.
+                            | NO EXISTE todavia: map_project.txt se creo aqui
+
+
+===============================================================================
+ 2. API PUBLICA  —  core/include/Uron/   (lo unico que ve el usuario)
+   Regla: aqui NUNCA aparecen tipos de Vulkan ni GLFW ni STL raro.
+===============================================================================
+Uron.h             (52) | cabecera unica + macros de version | #include <Uron/Uron.h>
+Types.h            (30) | alias u8/u16/u32/u64, i8..i64, f32/f64, struct Rect
+Logger.h           (47) | enum LogLevel, class Logger | macros URON_INFO,
+                        | URON_WARN, URON_ERROR, URON_FATAL, URON_TRACE
+Engine.h           (86) | class Engine (pimpl): init, attachWindow, setScene,
+                        | beginFrame/clear/endFrame, importPlugin<T>,
+                        | plugin<T>(), shutdown | USA: PluginManager, Renderer
+Window.h           (77) | struct WindowConfig, struct WindowCallbacks,
+                        | class Window (pimpl, GLFW oculto): create, destroy,
+                        | pollEvents, shouldClose, setTitle, callbacks
+
+  --- math/ ---------------------------------------------------------------
+Vec2.h             (53) | struct Vec2: x,y + operadores, length, dot, normalize
+Vec3.h             (63) | struct Vec3: x,y,z + cross, normalize, etc.
+Vec4.h             (46) | struct Vec4: x,y,z,w
+Mat3.h             (93) | struct Mat3: identidad, mul, transpose, det, inverse
+Mat4.h            (145) | struct Mat4: identidad, mul, translate/rotate/scale,
+                        | perspective/ortho, transpose, inverse | USADO POR TODO
+Quat.h            (132) | struct Quat: fromAxisAngle, fromEuler, slerp, toMat4
+Math.h             (63) | PI/TAU/EPSILON, radians, degrees, clamp, lerp, min/max
+
+  --- render/ -------------------------------------------------------------
+Color.h            (43) | struct Color r,g,b,a + Black(), White(), Red()...
+                        |   (constantes tipo factory: Color::Black())
+Renderer.h         (35) | class Renderer INTERFAZ abstracta: init, shutdown,
+                        | beginFrame, clear, endFrame, setViewport,
+                        | drawMesh, drawSprite(tex, mat, Shader*), waitIdle,
+                        | width/height | implementada por VulkanRenderer
+Mesh.h             (59) | struct Vertex, class Mesh, class MeshBuilder
+                        |   (triangle, quad, cube, circle)
+Texture.h          (56) | enum TextureFilter, enum TextureWrap, struct
+                        |   TextureDesc, class Texture: load(path), isValid,
+                        |   width/height/pixels/handle
+Shader.h           (90) | struct ShaderDesc (depth, blending, wireframe),
+                        |   class Shader (pimpl): loadFromFile (valida que los
+                        |   .spv existen + handle unico), loadFromSource (NO
+                        |   soportado), setUniform(*), hasUniform, bind, handle,
+                        |   internal. Uniforms: se empaquetan en el orden de la
+                        |   primera setUniform (std430) en el push de 128 bytes
+                        |   (offset 24+), ver CLAUDE.md §5
+Camera.h           (28) | struct Camera3D (position, fov, near/far, view/proj)
+Transform.h        (37) | struct Transform (position, rotation, scale) + matrix()
+Render.h           (18) | agregador: incluye Color/Renderer/Mesh/Texture/
+                        |   Shader/Camera/Transform
+
+  --- scene/ --------------------------------------------------------------
+Node2D.h           (83) | class Node2D: nombre, posicion, rotacion, escala,
+                        |   parent/hijos, addChild, update, onRender (virtual)
+Scene2D.h          (45) | class Scene2D: root(), setClearColor, update,
+                        |   render(Renderer&) — recorre el arbol
+Sprite2D.h         (32) | class Sprite2D : Node2D — m_texture, m_size,
+                        |   setTexture(path), setShader(Shader*), onRender
+Camera2D.h         (39) | class Camera2D : Node2D — camara 2D
+
+  --- Plugin/  (sistema de plugins) ---------------------------------------
+IPlugin.h          (29) | class IPlugin: onLoad, onUnload, onUpdate (puro)
+PluginID.h         (34) | using PluginID = u64, makePluginID() constexpr
+Macros.h           (21) | #define URON_PLUGIN(NS, CLASS) — auto-registro
+PluginRegistry.h   (43) | class PluginRegistry (singleton): registerFactory,
+                        |   create, exists, list
+PluginManager.h    (79) | class PluginManager: load<T>, unload, updateAll,
+                        |   get<T>, isLoaded, count — lo usa Engine
+PluginContext.h    (31) | class PluginContext: engine(), id(), bus(), services()
+PluginConfig.h     (63) | class PluginConfig: set/get/getFloat/getBool/has
+ServiceRegistry.h  (62) | class ServiceRegistry: provide<T>, consume<T>, has
+EventBus.h         (50) | struct Event, class EventBus: subscribe/publish
+ApiPlugin.h        (46) | class ApiPlugin: callbacks onUpdate/onEvent
+IPluginApi.h       (22) | template <T> class IPluginApi: api() tipado
+
+
+===============================================================================
+ 3. IMPLEMENTACION  —  core/src/   (puede ver Vulkan internamente)
+===============================================================================
+Engine.cpp        (280) | struct Engine::Impl: crea VulkanRenderer, PluginManager,
+                        |   carga escena, ciclo beginFrame/clear/endFrame
+Logger.cpp         (84) | Logger con mutex + timestamp por nivel
+Window.cpp        (232) | struct Window::Impl (GLFWwindow*): create/destroy/
+                        |   pollEvents + traduccion de callbacks de input
+
+render/Texture.cpp (87) | #define STB_IMAGE_IMPLEMENTATION + carga PNG/JPG
+render/Shader.cpp (206) | Shader::Impl = ShaderData: loadFromFile valida .spv
+                        |   y asigna handle unico; setUniform registra nombre+
+                        |   tipo en ORDEN de insercion; ShaderData::
+                        |   packUniforms() empaqueta std430 en [24,128) del
+                        |   push constant; internal() expone ShaderData* al
+                        |   renderer (sin tipos Vulkan)
+render/ShaderInternal.h (67) | PRIVADO: enum UniformType, struct UniformValue,
+                        |   struct ShaderData + constantes SPRITE_PUSH_BYTES=24,
+                        |   CUSTOM_PUSH_BYTES=128, UNIFORM_PUSH_BYTES=104.
+                        |   Compartido por Shader.cpp y VulkanRenderer.cpp
+
+scene/Node2D.cpp   (66) | arbol de nodos: addChild, removeChild, update, find
+scene/Scene2D.cpp  (40) | recorre el arbol llamando onRender(renderer)
+scene/Sprite2D.cpp (27) | compone Mat4 con size/position y llama
+                        |   renderer.drawSprite(m_texture, t, m_shader)
+
+Plugin/PluginManager.cpp (66) | ciclo de vida de plugins
+Plugin/PluginRegistry.cpp (34) | mapa id -> factory
+Plugin/PluginContext.cpp   (28) | contexto inyectado al plugin
+Plugin/ApiPlugin.cpp       (65) | registro de callbacks
+
+  --- src/vulkan/  (PRIVADO: el usuario jamas lo incluye) -----------------
+VulkanContext.h/.cpp (42/176) | class Context: instance, physical/logical device,
+                        |   queues, surface, validation layers
+Swapchain.h/.cpp     (37/151) | class Swapchain: create, acquire, present,
+                        |   recreate, extent, format
+VulkanImage.h/.cpp   (35/206) | class VulkanImage: image+view+memory+sampler
+Pipeline.h/.cpp      (23/138) | class Pipeline: pipeline grafica generica
+                        |   (.spv -> VkPipeline), layout, handle
+SpritePipeline.h/.cpp(28/235) | class SpritePipeline: pipeline de sprites 2D,
+                        |   push constants de 24 bytes (ver CLAUDE.md §5),
+                        |   allocateSet(descriptor set por textura)
+VulkanShader.h/.cpp  (37/242) | class VulkanShader: pipeline custom desde .spv
+                        |   con push constants de 128 bytes (32 floats) y
+                        |   pool propio de descriptor sets
+VulkanRenderer.h/.cpp(60/569) | class VulkanRenderer : Renderer (pimpl):
+                        |   init/shutdown, beginFrame/clear/endFrame,
+                        |   drawSprite (spritePipeline o pipeline custom),
+                        |   struct Impl guarda context, swapchain, pipelines,
+                        |   texturas, sync (MAX_FRAMES=2)
+                        |   drawSpriteCustom(): crea VulkanShader perezoso por
+                        |   Shader::handle(), cachea descriptor sets por
+                        |   (shader,textura), empuja 128 bytes (sprite+uniforms)
+                        |   structs internos: SpriteVertex, SpritePush (24),
+                        |   CustomPush (128, con static_assert)
+
+
+===============================================================================
+ 4. PLUGINS OFICIALES
+===============================================================================
+plugins/CMakeLists.txt        | add_subdirectory(physics)
+plugins/physics/CMakeLists.txt| lib estatica uron_plugin_physics ->
+                              |   alias Uron::Plugin::Physics
+plugins/physics/include/Uron/Plugin/Physics.h (67)
+                          | namespace Uron::Plugin::Physics:
+                          |   struct BodyDesc, struct Body, class Plugin :
+                          |   IPlugin con ID/NAME/VERSION/AUTHOR, API
+                          |   (createBody, step, positions)
+plugins/physics/src/Physics.cpp (90) | onLoad/onUnload/onUpdate + simulacion
+                          |   basica (gravedad, integracion Euler)
+
+
+===============================================================================
+ 5. EJEMPLOS  —  examples/CMakeLists.txt registra todos los targets
+===============================================================================
+examples/CMakeLists.txt     | target uron_example_data (copia GLSL + assets,
+                            |   NUNCA .spv: esos los genera glslc) +
+                            |   ejecutables hello_*
+hello_uron/main.cpp    (39) | minimo: Engine + Window + clear por frame
+hello_scene/main.cpp   (100) | arbol de escena: clases locales Player, Rotator
+hello_sprite/main.cpp  (38) | sprite con textura assets/player.png
+hello_shader/main.cpp  (53) | sprite con Uron::Shader custom (wave), setUniform
+                            |   time/amplitude/tint cada frame
+hello_physics/main.cpp (55) | plugin Physics: createBody + step + imprimir pos
+hello_sprite/assets/player.png | textura usada por hello_sprite y hello_shader
+
+
+===============================================================================
+ 6. SHADERS  —  shaders/ (GLSL) -> build/bin/shaders/*.spv (glslc en el build)
+===============================================================================
+sprite.vert / sprite.frag     | pipeline por defecto de sprites 2D
+                               |   push constant: vec2 pos + vec2 size + vec2
+                               |   screen (24 bytes)
+wave.vert / wave.frag         | shader custom de ejemplo (hello_shader),
+                               |   push constant de 128 bytes (32 floats):
+                               |   position/size/screenSize + time@24,
+                               |   amplitude@28, vec3 tint@32 (std430, ver
+                               |   offsets con spirv-dis si se duda)
+triangle.vert / triangle.frag  | triangulo basico (referencia/pruebas)
+compile.sh                     | compila todos los .vert/.frag con glslc a mano
+*.spv                          | NO estan en git: los genera CMake (glslc)
+
+
+===============================================================================
+ 7. TERCEROS
+===============================================================================
+third_party/stb/stb_image.h    | stb_image v2.30 (dominio publico). El unico
+                               |   #define STB_IMAGE_IMPLEMENTATION esta en
+                               |   core/src/render/Texture.cpp — NO repetirlo.
+
+
+===============================================================================
+ 8. TABLA RAPIDA:  "necesito X"  ->  "abro Y"
+===============================================================================
+Tipo publico nuevo .......... core/include/Uron/Types.h
+Clase publica nueva ......... core/include/Uron/...
+Metodo de la interfaz render  core/include/Uron/render/Renderer.h
+                              + core/src/vulkan/VulkanRenderer.h/.cpp
+Log ........................ core/include/Uron/Logger.h (URON_INFO/WARN/ERROR)
+Matematicas ................ core/include/Uron/math/*
+Nodo/escena/sprite .......... core/include/Uron/scene/*
+Plugin nuevo ................ plugins/<nombre>/ + URON_PLUGIN (ver CLAUDE.md §6)
+Ejemplo nuevo ............... examples/<nombre>/ + examples/CMakeLists.txt
+Shader nuevo ................ shaders/<nombre>.{vert,frag} (glslc automatico)
+Implementar Vulkan .......... core/src/vulkan/*  (NUNCA en scene/ ni render/)
+Carga de texturas ........... core/src/render/Texture.cpp (stb_image)
+
+
+===============================================================================
+ 9. ESTADO CONOCIDO  (útil antes de tocar render/shaders)
+===============================================================================
+· Shaders custom CONECTADOS (fase D): drawSprite crea el VulkanShader en el
+  primer draw (cacheado por Shader::handle()) y empuja 128 bytes
+  (sprite + uniforms). Si la creacion falla, avisa una vez y cae al
+  spritePipeline. Los recursos GPU los destruye VulkanRenderer::shutdown.
+· Contrato de uniforms: se empaquetan en el orden de la PRIMERA
+  setUniform() por nombre, que debe coincidir con el orden de declaracion
+  del bloque layout(push_constant) del GLSL (alineacion std430). Los no
+  fijados viajan como 0. Maximo 104 bytes de uniforms (24 de sprite).
+· Shader::loadFromSource() NO compila GLSL en runtime: devuelve false con
+  URON_ERROR (usa glslc o el build de CMake para generar los .spv).
+· uron_example_data NO copia *.spv desde shaders/: un .spv manual de
+  compile.sh pisaba el .spv recien compilado por glslc en bin/shaders.
+· Sincronizacion: MAX_FRAMES = 2 (imageAvailable/renderFinished/inFlight).
+  Known (preexistente, ajeno a shaders): con VK_LAYER_KHRONOS_validation
+  salta VUID-vkQueueSubmit-pSignalSemaphores-00067 (reuse de semaforos
+  binarios) en cualquier ejemplo.
+· Todo .cpp nuevo debe entrar en URON_CORE_SOURCES (core/CMakeLists.txt),
+  los .h publicos en URON_CORE_HEADERS y los privados en
+  URON_CORE_PRIVATE_HEADERS.
+· Version sincronizada en 0.4.0: CMakeLists.txt (PROJECT_VERSION), Uron.h
+  (URON_VERSION_*) y el banner de Engine.cpp (usa URON_VERSION_STRING).
+· Verifica siempre: cmake --build build  → 0 errores, 0 warnings.
+
+===============================================================================
+ Uron — Light, flexible, lethal.
+===============================================================================

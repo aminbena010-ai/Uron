@@ -4,9 +4,12 @@
 #include "Pipeline.h"
 #include "SpritePipeline.h"
 #include "VulkanImage.h"
+#include "VulkanShader.h"
+#include "render/ShaderInternal.h"
 #include <Uron/Window.h>
 #include <Uron/Logger.h>
 #include <Uron/render/Texture.h>
+#include <Uron/render/Shader.h>
 #include <GLFW/glfw3.h>
 #include <vector>
 #include <unordered_map>
@@ -26,9 +29,30 @@ struct SpritePush {
     float size[2];
     float screenSize[2];
 };
-static_assert(sizeof(SpritePush) == 24, "SpritePush debe tener 24 bytes");
+static_assert(sizeof(SpritePush) == SPRITE_PUSH_BYTES,
+              "SpritePush debe tener 24 bytes");
+
+// CLAUDE.md §5: shaders custom = 128 bytes (32 floats) = sprite + uniforms
+struct CustomPush {
+    float position[2];
+    float size[2];
+    float screenSize[2];
+    u8    uniforms[UNIFORM_PUSH_BYTES];
+};
+static_assert(sizeof(CustomPush) == CUSTOM_PUSH_BYTES,
+              "CustomPush debe tener 128 bytes");
+static_assert(sizeof(CustomPush) == sizeof(float) * 32,
+              "CustomPush debe ocupar 32 floats");
 
 struct VulkanRenderer::Impl {
+    // Pipeline custom por Shader::handle(); shader == nullptr => la creacion
+    // fallo y se usa el pipeline por defecto (no se reintenta cada frame).
+    struct CustomShader {
+        VulkanShader* shader = nullptr;
+        bool attempted = false;
+        std::unordered_map<u64, VkDescriptorSet> sets;
+    };
+
     Context     context;
     Swapchain   swapchain;
     Pipeline    pipeline;
@@ -50,6 +74,7 @@ struct VulkanRenderer::Impl {
     std::vector<VulkanImage*> images;
     std::unordered_map<u64, VulkanImage*>    textureCache;
     std::unordered_map<u64, VkDescriptorSet> descriptorCache;
+    std::unordered_map<u64, CustomShader>    customShaders;
 
     uint32_t currentFrame = 0;
     uint32_t imageIndex   = 0;
@@ -171,6 +196,14 @@ void VulkanRenderer::shutdown() {
         delete m_impl->spritePipeline;
         m_impl->spritePipeline = nullptr;
     }
+
+    for (auto& kv : m_impl->customShaders) {
+        if (kv.second.shader) {
+            kv.second.shader->destroy(m_impl->context);
+            delete kv.second.shader;
+        }
+    }
+    m_impl->customShaders.clear();
 
     for (auto f : m_impl->inFlight)       vkDestroyFence(m_impl->context.device(), f, nullptr);
     for (auto s : m_impl->renderFinished) vkDestroySemaphore(m_impl->context.device(), s, nullptr);
@@ -374,7 +407,8 @@ void VulkanRenderer::endFrame() {
     m_impl->currentFrame = (m_impl->currentFrame + 1) % MAX_FRAMES;
 }
 
-void VulkanRenderer::drawSprite(const Texture& tex, const Mat4& transform) {
+void VulkanRenderer::drawSprite(const Texture& tex, const Mat4& transform,
+                                Shader* shader) {
     static int calls = 0;
     if (calls < 3) {
         URON_INFO("drawSprite llamado (llamada #" + std::to_string(calls + 1) + ")");
@@ -383,10 +417,6 @@ void VulkanRenderer::drawSprite(const Texture& tex, const Mat4& transform) {
 
     if (!tex.isValid()) {
         URON_WARN("drawSprite: textura invalida");
-        return;
-    }
-    if (!m_impl->spritePipeline || !m_impl->spritePipeline->handle()) {
-        URON_WARN("drawSprite: spritePipeline no disponible");
         return;
     }
 
@@ -409,6 +439,24 @@ void VulkanRenderer::drawSprite(const Texture& tex, const Mat4& transform) {
         m_impl->images.push_back(img);
     }
 
+    SpritePush push{};
+    push.position[0] = transform.m[3][0];
+    push.position[1] = transform.m[3][1];
+    push.size[0] = transform.m[0][0];
+    push.size[1] = transform.m[1][1];
+    push.screenSize[0] = static_cast<float>(m_impl->swapchain.extent().width);
+    push.screenSize[1] = static_cast<float>(m_impl->swapchain.extent().height);
+
+    if (shader && shader->isValid() &&
+        drawSpriteCustom(cmd, img, key, *shader, &push)) {
+        return;
+    }
+
+    if (!m_impl->spritePipeline || !m_impl->spritePipeline->handle()) {
+        URON_WARN("drawSprite: spritePipeline no disponible");
+        return;
+    }
+
     VkDescriptorSet set = VK_NULL_HANDLE;
     auto itSet = m_impl->descriptorCache.find(key);
     if (itSet != m_impl->descriptorCache.end()) {
@@ -429,19 +477,65 @@ void VulkanRenderer::drawSprite(const Texture& tex, const Mat4& transform) {
                             m_impl->spritePipeline->layout(),
                             0, 1, &set, 0, nullptr);
 
-    SpritePush push{};
-    push.position[0] = transform.m[3][0];
-    push.position[1] = transform.m[3][1];
-    push.size[0] = transform.m[0][0];
-    push.size[1] = transform.m[1][1];
-    push.screenSize[0] = static_cast<float>(m_impl->swapchain.extent().width);
-    push.screenSize[1] = static_cast<float>(m_impl->swapchain.extent().height);
-
     vkCmdPushConstants(cmd, m_impl->spritePipeline->layout(),
                        VK_SHADER_STAGE_VERTEX_BIT, 0,
                        sizeof(SpritePush), &push);
 
     vkCmdDraw(cmd, 6, 1, 0, 0);
+}
+
+bool VulkanRenderer::drawSpriteCustom(VkCommandBuffer cmd, VulkanImage* img,
+                                      u64 texKey, const Shader& shader,
+                                      const void* spritePush) {
+    auto* data = static_cast<ShaderData*>(shader.internal());
+    if (!data || !data->loaded) return false;
+
+    Impl::CustomShader& entry = m_impl->customShaders[data->handle];
+    if (!entry.attempted) {
+        entry.attempted = true;
+        auto* custom = new VulkanShader();
+        if (custom->create(m_impl->context, m_impl->swapchain,
+                           m_impl->renderPass, data->vertPath,
+                           data->fragPath, data->desc)) {
+            entry.shader = custom;
+            URON_INFO("Pipeline custom creado: " + data->vertPath);
+        } else {
+            delete custom;
+            URON_ERROR("Pipeline custom fallo (" + data->vertPath +
+                       "); se usa el pipeline de sprites");
+        }
+    }
+    if (!entry.shader) return false;
+
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    auto itSet = entry.sets.find(texKey);
+    if (itSet != entry.sets.end()) {
+        set = itSet->second;
+    } else {
+        set = entry.shader->allocateSet(m_impl->context, img->view(),
+                                        img->sampler());
+        if (set == VK_NULL_HANDLE) return false;
+        entry.sets[texKey] = set;
+    }
+
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &m_impl->quadBuffer, &offset);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      entry.shader->pipeline());
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            entry.shader->layout(),
+                            0, 1, &set, 0, nullptr);
+
+    CustomPush push{};
+    std::memcpy(&push, spritePush, SPRITE_PUSH_BYTES);
+    data->packUniforms(&push, CUSTOM_PUSH_BYTES);
+
+    vkCmdPushConstants(cmd, entry.shader->layout(),
+                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, CUSTOM_PUSH_BYTES, &push);
+
+    vkCmdDraw(cmd, 6, 1, 0, 0);
+    return true;
 }
 
 void VulkanRenderer::waitIdle() {

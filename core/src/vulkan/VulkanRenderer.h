@@ -6,12 +6,14 @@
 namespace Uron {
 class Window;
 class Texture;
+class Shader;
 }
 
 namespace Uron::Vulkan {
 
 class SpritePipeline;
 class VulkanImage;
+class VulkanShader;
 
 class VulkanRenderer : public Renderer {
 public:
@@ -26,7 +28,7 @@ public:
     void endFrame() override;
 
     void drawMesh(const Mesh&, const Mat4&) override {}
-    void drawSprite(const Texture&, const Mat4&) override;
+    void drawSprite(const Texture&, const Mat4&, Shader* shader = nullptr) override;
     void waitIdle() override;
 
     void setViewport(u32, u32, u32, u32) override {}
@@ -44,6 +46,11 @@ private:
     bool createCommandBuffers();
     bool createSyncObjects();
     bool createQuadBuffer();
+
+    // Dibuja con el pipeline del Shader custom; devuelve false si hay que
+    // recurrir al spritePipeline. spritePush = 24 bytes (SpritePush).
+    bool drawSpriteCustom(VkCommandBuffer cmd, VulkanImage* img, u64 texKey,
+                          const Shader& shader, const void* spritePush);
 
     void shutdownVulkan();
 

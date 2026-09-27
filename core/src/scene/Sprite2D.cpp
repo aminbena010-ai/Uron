@@ -1,7 +1,7 @@
 #include <Uron/scene/Sprite2D.h>
 #include <Uron/render/Renderer.h>
 #include <Uron/render/Texture.h>
-#include <Uron/Logger.h>
+#include <Uron/render/Shader.h>
 
 namespace Uron {
 
@@ -14,16 +14,7 @@ void Sprite2D::setTexture(const std::string& path) {
 }
 
 void Sprite2D::onRender(Renderer& renderer) {
-    static int calls = 0;
-    if (calls < 3) {
-        URON_INFO("Sprite2D::onRender (" + m_name + ")");
-        calls++;
-    }
-
-    if (!m_texture.isValid()) {
-        URON_WARN("Sprite2D: textura invalida, no se dibuja");
-        return;
-    }
+    if (!m_texture.isValid()) return;
 
     Mat4 t = Mat4::identity();
     t.m[0][0] = m_size.x;
@@ -31,7 +22,7 @@ void Sprite2D::onRender(Renderer& renderer) {
     t.m[3][0] = m_position.x;
     t.m[3][1] = m_position.y;
 
-    renderer.drawSprite(m_texture, t);
+    renderer.drawSprite(m_texture, t, m_shader);
 }
 
 }

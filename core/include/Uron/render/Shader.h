@@ -1,17 +1,30 @@
 // ============================================================================
 //  render/Shader.h
 //  ---------------------------------------------------------------------------
-//  QUE ES: Programa de shader (vertex + fragment).
-//  CONTIENE: struct ShaderDesc, clase Shader con loadFromFile(),
-//            loadFromSource(), setUniform*(), bind().
-//  PARA QUE: Que el usuario cargue shaders (SPIR-V compilados) y los use
-//            para dibujar, sin tocar Vulkan.
-//  QUIEN LO USA: El usuario (shaders custom), el motor (shader por defecto).
-//  NOTA: El motor compila GLSL -> SPIR-V en build time con glslangValidator.
-//        El usuario puede pasar .vert/.frag o .spv directamente.
+//  QUE ES: Shader custom (vertex + fragment) compilados a SPIR-V.
+//  CONTIENE: struct ShaderDesc (estado del pipeline), clase Shader con
+//            loadFromFile(), setUniform*(), hasUniform().
+//  PARA QUE: Que el usuario dibuje con su propio .vert/.frag sin tocar
+//            Vulkan. El pipeline GPU se crea en el primer draw.
+//  QUIEN LO USA: El usuario (via Sprite2D::setShader).
+//
+//  PUSH CONSTANTS (128 bytes, ver CLAUDE.md §5):
+//     offset  0: vec2 position
+//     offset  8: vec2 size
+//     offset 16: vec2 screenSize
+//     offset 24: uniforms del usuario (alineacion std430)
+//  Los uniforms se empaquetan EN EL ORDEN en que se llama a setUniform() la
+//  primera vez con cada nombre, que debe coincidir con el orden de
+//  declaracion del bloque layout(push_constant) del GLSL. Los no fijados se
+//  envian como 0.
+//
 //  EJEMPLO:
 //     Shader s;
-//     s.loadFromFile("sprite.vert", "sprite.frag");
+//     s.loadFromFile("shaders/wave.vert.spv", "shaders/wave.frag.spv");
+//     s.setUniform("time", t);          // mismo orden que en el .vert
+//     sprite->setShader(&s);
+//  NOTA: loadFromSource() no compila GLSL en runtime: usa glslc (o el build
+//        de CMake) para generar los .spv.
 // ============================================================================
 #pragma once
 #include <Uron/Types.h>
@@ -21,19 +34,20 @@
 #include <Uron/math/Vec3.h>
 #include <Uron/math/Vec4.h>
 #include <string>
+#include <unordered_map>
 
 namespace Uron {
 
 struct ShaderDesc {
-    bool depthTest  = true;
-    bool depthWrite = true;
-    bool blending   = false;
+    bool depthTest  = false;
+    bool depthWrite = false;
+    bool blending   = true;
     bool wireframe  = false;
 };
 
 class Shader {
 public:
-    Shader() = default;
+    Shader();
     ~Shader();
 
     Shader(const Shader&)            = delete;
@@ -53,7 +67,7 @@ public:
     void bind();
     void unbind();
 
-    bool isValid() const { return m_handle != 0; }
+    bool isValid() const;
 
     void setUniform(const char* name, f32 v);
     void setUniform(const char* name, i32 v);
@@ -63,12 +77,15 @@ public:
     void setUniform(const char* name, const Color& v);
     void setUniform(const char* name, const Mat4& v);
 
-    u64 handle() const { return m_handle; }
+    bool hasUniform(const char* name) const;
+
+    u64 handle() const;
+
+    void* internal() const;
 
 private:
-    u64 m_handle = 0;
-
-    friend class VulkanRenderer;
+    struct Impl;
+    Impl* impl;
 };
 
 }

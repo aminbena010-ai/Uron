@@ -6,13 +6,26 @@
 # Datos comunes (shaders + assets) -> bin/
 # Un SOLO target evita la carrera de varios POST_BUILD copiando la misma
 # carpeta en paralelo (cmake --build -j).
+# Los .spv NO se copian desde shaders/: los genera glslc (uron_shaders) y un
+# .spv manual de compile.sh pisaria el recien compilado.
 # ----------------------------------------------------------------------------
+file(GLOB URON_SHADER_SOURCES
+    ${CMAKE_SOURCE_DIR}/shaders/*.vert
+    ${CMAKE_SOURCE_DIR}/shaders/*.frag
+)
+set(URON_SHADER_COPY_COMMANDS "")
+foreach(src ${URON_SHADER_SOURCES})
+    get_filename_component(fname ${src} NAME)
+    list(APPEND URON_SHADER_COPY_COMMANDS
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${src} ${CMAKE_BINARY_DIR}/bin/shaders/${fname}
+    )
+endforeach()
+
 add_custom_target(uron_example_data ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory
             ${CMAKE_BINARY_DIR}/bin/shaders
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/shaders
-            ${CMAKE_BINARY_DIR}/bin/shaders
+    ${URON_SHADER_COPY_COMMANDS}
     COMMAND ${CMAKE_COMMAND} -E make_directory
             ${CMAKE_BINARY_DIR}/bin/assets
     COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -89,3 +102,20 @@ set_target_properties(hello_sprite PROPERTIES
 )
 
 add_dependencies(hello_sprite uron_example_data)
+
+# ----------------------------------------------------------------------------
+# hello_shader - Ejemplo de shader custom por sprite
+# ----------------------------------------------------------------------------
+add_executable(hello_shader
+    hello_shader/main.cpp
+)
+
+target_link_libraries(hello_shader PRIVATE
+    Uron::Core
+)
+
+set_target_properties(hello_shader PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+add_dependencies(hello_shader uron_example_data)

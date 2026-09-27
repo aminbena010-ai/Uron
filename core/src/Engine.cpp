@@ -1,4 +1,5 @@
 #include <Uron/Engine.h>
+#include <Uron/Uron.h>
 #include <Uron/Logger.h>
 #include <Uron/Plugin/IPlugin.h>
 #include <Uron/Plugin/PluginContext.h>
@@ -50,7 +51,7 @@ bool Engine::init() {
     }
 
     Logger::info("===========================================");
-    Logger::info("  Uron Engine 0.3.0");
+    Logger::info("  Uron Engine " URON_VERSION_STRING);
     Logger::info("  Ligero, flexible, letal.");
     Logger::info("===========================================");
 

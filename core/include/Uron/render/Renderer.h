@@ -1,15 +1,3 @@
-// ============================================================================
-//  render/Renderer.h
-//  ---------------------------------------------------------------------------
-//  QUE ES: Interfaz abstracta del renderizador.
-//  CONTIENE: clase Renderer con beginFrame(), clear(), endFrame(),
-//            drawMesh(), drawSprite(), setViewport().
-//  PARA QUE: Que el motor tenga UNA interfaz de render, y detras pueda
-//            haber Vulkan hoy y WebGPU mañana sin que el usuario lo note.
-//  QUIEN LO USA: El usuario (a traves de Engine), los plugins.
-//  NOTA: Renderer es una INTERFAZ. VulkanRenderer la implementa.
-//        El usuario nunca ve VulkanRenderer directamente.
-// ============================================================================
 #pragma once
 #include <Uron/render/Color.h>
 #include <Uron/math/Mat4.h>
@@ -36,7 +24,8 @@ public:
     virtual void setClearColor(const Color& c) = 0;
 
     virtual void drawMesh(const Mesh& mesh, const Mat4& transform) = 0;
-    virtual void drawSprite(const Texture& tex, const Mat4& transform) = 0;
+    virtual void drawSprite(const Texture& tex, const Mat4& transform,
+                            Shader* shader = nullptr) = 0;
 
     virtual void waitIdle() = 0;
 
