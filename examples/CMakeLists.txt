@@ -3,6 +3,25 @@
 # ============================================================================
 
 # ----------------------------------------------------------------------------
+# Datos comunes (shaders + assets) -> bin/
+# Un SOLO target evita la carrera de varios POST_BUILD copiando la misma
+# carpeta en paralelo (cmake --build -j).
+# ----------------------------------------------------------------------------
+add_custom_target(uron_example_data ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            ${CMAKE_BINARY_DIR}/bin/shaders
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/shaders
+            ${CMAKE_BINARY_DIR}/bin/shaders
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            ${CMAKE_BINARY_DIR}/bin/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/examples/hello_sprite/assets
+            ${CMAKE_BINARY_DIR}/bin/assets
+    COMMENT "Copiando shaders y assets a bin/"
+)
+
+# ----------------------------------------------------------------------------
 # hello_uron - Ejemplo minimo: ventana + clear
 # ----------------------------------------------------------------------------
 add_executable(hello_uron
@@ -17,13 +36,7 @@ set_target_properties(hello_uron PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-add_custom_command(TARGET hello_uron POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            $<TARGET_FILE_DIR:hello_uron>/shaders
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/shaders
-            $<TARGET_FILE_DIR:hello_uron>/shaders
-)
+add_dependencies(hello_uron uron_example_data)
 
 # ----------------------------------------------------------------------------
 # hello_physics - Ejemplo del plugin Physics
@@ -41,13 +54,7 @@ set_target_properties(hello_physics PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-add_custom_command(TARGET hello_physics POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            $<TARGET_FILE_DIR:hello_physics>/shaders
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/shaders
-            $<TARGET_FILE_DIR:hello_physics>/shaders
-)
+add_dependencies(hello_physics uron_example_data)
 
 # ----------------------------------------------------------------------------
 # hello_scene - Ejemplo de escenas y nodos 2D
@@ -64,13 +71,7 @@ set_target_properties(hello_scene PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-add_custom_command(TARGET hello_scene POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            $<TARGET_FILE_DIR:hello_scene>/shaders
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/shaders
-            $<TARGET_FILE_DIR:hello_scene>/shaders
-)
+add_dependencies(hello_scene uron_example_data)
 
 # ----------------------------------------------------------------------------
 # hello_sprite - Ejemplo de sprites con textura
@@ -87,15 +88,4 @@ set_target_properties(hello_sprite PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-add_custom_command(TARGET hello_sprite POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            $<TARGET_FILE_DIR:hello_sprite>/shaders
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/shaders
-            $<TARGET_FILE_DIR:hello_sprite>/shaders
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-            $<TARGET_FILE_DIR:hello_sprite>/assets
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/examples/hello_sprite/assets
-            $<TARGET_FILE_DIR:hello_sprite>/assets
-)
+add_dependencies(hello_sprite uron_example_data)
